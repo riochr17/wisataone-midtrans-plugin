@@ -18,7 +18,7 @@ require_once(dirname(__FILE__) . '/veritrans-php-master/Veritrans.php');
  * Snap token will be used on SNAP Popup on frontend.
  */
 if (!function_exists('startPayment')) {
-    function startPayment($order_id, $amount, $bdata) {
+    function startPayment($order_id, $amount, $bdata, $isDeposit) {
 
         $server_key = tourmaster_get_option('payment', 'midtrans-server-key', '');
         $production_mode = tourmaster_get_option('payment', 'midtrans-production-mode', 'disable');
@@ -46,9 +46,10 @@ if (!function_exists('startPayment')) {
         // Optional for other payment methods
         $item1_details = array(
             'id' => $booking_detail->{"tour-id"},
-            'price' => intval($pricing_info->{"total-price"}),
-            'quantity' => intval($bdata->traveller_amount),
-            'name' => "Wisataone Tour ID: #" . $booking_detail->{"tour-id"}
+            'price' => $amount,
+            'quantity' => 1, // revision
+            //'quantity' => intval($bdata->traveller_amount),
+            'name' => ($isDeposit ? "Deposit: " : "Full Payment: ") . get_the_title($booking_detail->{"tour-id"})
         );
         $item_details = array ($item1_details);
         
@@ -152,8 +153,7 @@ if( !function_exists('tourmaster_midtrans_payment_form') ){
         $client_key = tourmaster_get_option('payment', 'midtrans-client-key', '');
         $production_mode = tourmaster_get_option('payment', 'midtrans-production-mode', 'disable');
         $isProduction = !(empty($production_mode) || $production_mode == 'disable');
-
-
+        
         $price = '';
         if( $t_data['price']['deposit-price'] ){
             $price = $t_data['price']['deposit-price'];
@@ -162,7 +162,7 @@ if( !function_exists('tourmaster_midtrans_payment_form') ){
         }
 
         $price = intval($price);
-        $snap_Token = startPayment("track-wst-$tid", $price, $bdata);
+        $snap_Token = startPayment(($t_data['price']['deposit-price'] ? "dp-" : "") . "track-wst-$tid", $price, $bdata, $t_data['price']['deposit-price']);
         ob_start();
 ?>
 <div class="goodlayers-paypal-redirecting-message" ><?php esc_html_e('Please wait while we redirect you to midtrans.', 'tourmaster') ?></div>
@@ -178,11 +178,6 @@ if( !function_exists('tourmaster_midtrans_payment_form') ){
     </script> 
 
     <script type="text/javascript">
-
-        console.log('<?php echo $tid; ?>');
-        console.log('<?php echo $price; ?>');
-        console.log(JSON.parse('<?php echo json_encode($t_data); ?>'));
-        console.log('<?php echo json_decode($bdata->billing_info)->first_name; ?>');
         function whenAvailable(callback) {
             var interval = 100; // ms
             window.setTimeout(function() {

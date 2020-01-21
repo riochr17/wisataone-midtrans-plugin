@@ -1,7 +1,7 @@
 <?php
 /**
 * Plugin Name: Wisataone Midtrans
-* Plugin URI: https://www.treasurf.com/
+* Plugin URI: https://www.riochandra.me/
 * Description: Wisataone Midtrans interface payment plugin
 * Version: 1.0
 * Author: Rio Chandra Rajagukguk
@@ -100,6 +100,7 @@ function register_notification_payment_route() {
 function sample_request($request) {
 
     $posts = json_encode($request->get_params());
+    wp_remote_post(get_site_url() . '/index.php/wp-json/step-payment/v1/notify', ['body' => $request->get_params()]);
     insert_notification($posts);
 
     $response = new WP_REST_Response(changeOrderStatus($request->get_params()));
@@ -112,7 +113,7 @@ function sample_request($request) {
  * Convert midtrans payment status to 
  * tourmaster theme payment status.
  */
-function convertOrderStatus($midtrans_order_status) {
+function convertOrderStatus($midtrans_order_status, $is_dp) {
     $Pending = 'pending';
     $Approved = 'approved';
     $Receipt_Submitted = 'receipt-submitted';
@@ -125,7 +126,7 @@ function convertOrderStatus($midtrans_order_status) {
     switch ($midtrans_order_status) {
         case 'authorize': return $Pending;
         case 'capture': return $Pending;
-        case 'settlement': return $Online_Paid;
+        case 'settlement': return $is_dp ? $Deposit_Paid : $Online_Paid;
         case 'deny': return $Rejected;
         case 'pending': return $Pending;
         case 'cancel': return $Cancel;
@@ -154,17 +155,19 @@ function changeOrderStatus($payment_notification) {
     global $wpdb;
     $wp_track_table = $wpdb->prefix . "tourmaster_order";
 
-    $order_status = convertOrderStatus($payment_notification['transaction_status']);
+    $order_id_array = explode("-", $payment_notification['order_id']);
+    $order_status = convertOrderStatus($payment_notification['transaction_status'], $order_id_array[0] == "dp");
     if (!$order_status) {
         return false;
     }
 
+    $tr_id = array_slice($order_id_array, -1)[0];
     $wpdb->update( 
         $wp_track_table, 
         array( 
             'order_status' => $order_status
         ), 
-        array( 'id' => $payment_notification['order_id'] ), 
+        array( 'id' => $tr_id ), 
         array( 
             '%s'
         ), 
